@@ -94,9 +94,9 @@ def record(eng: Engine, user: dict, kind: str, text: str, asset_id: str | None =
                 out["conflicts"].append(
                     f"The same inspection has the inspector's remark \"{r.notes}\" ({eng.name(r.inspector_user_id)}), "
                     f"which disagrees with the corrected reading. Ask {user['name']} to confirm.")
-        elif kind == "correct_spill_volume":
+            t_s = f"{r.t.day} {r.t.strftime('%b %Y %H:%M')}"
             out["consequences"].append(
-                f"{iid} ({r.t.strftime('%-d %b %Y %H:%M')} UTC): volume {new_value} bbl (AI estimate {old} kept for reference) → "
+                f"{iid} ({t_s} UTC): volume {new_value} bbl (AI estimate {old} kept for reference) → "
                 f"class '{r2.spill_class}' (was '{before['class']}').")
             audit = eng.compliance_audit(asset_id=aid, start=str(r.t.date()), end=str(r.t.date()))
             out["consequences"].append(audit["summary"])

@@ -26,7 +26,7 @@ WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
 def _jsonl(path: str) -> list[dict]:
     if not os.path.exists(path):
         return []
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
@@ -239,28 +239,28 @@ def load(dirs: list[str] | None = None) -> Data:
     for root in dirs:
         fleet = root / "fleet"
         if (fleet / "areas.json").exists():
-            a = json.loads((fleet / "areas.json").read_text())
+            a = json.loads((fleet / "areas.json").read_text(encoding="utf-8"))
             for ar in a.get("areas", []):
                 prev = areas.get(ar["area_id"], {"asset_ids": []})
                 areas[ar["area_id"]] = {**ar, "asset_ids": sorted(set(prev["asset_ids"]) | set(ar.get("asset_ids", [])))}
             for t in a.get("teams", []):
                 teams[t["team_id"]] = t
         if (fleet / "users.json").exists():
-            for u in json.loads((fleet / "users.json").read_text()).get("users", []):
+            for u in json.loads((fleet / "users.json").read_text(encoding="utf-8")).get("users", []):
                 users[u["user_id"]] = u
         for md in sorted(glob.glob(str(fleet / "**" / "*.md"), recursive=True)):
             rel = os.path.relpath(md, fleet)
-            docs[rel] = Path(md).read_text()
+            docs[rel] = Path(md).read_text(encoding="utf-8")
         for wt_md in sorted(glob.glob(str(fleet / "well-types" / "*.md"))):
             name = Path(wt_md).stem
-            rules, parent = extract_well_type_rules(name, Path(wt_md).read_text())
+            rules, parent = extract_well_type_rules(name, Path(wt_md).read_text(encoding="utf-8"))
             type_rules[name] = rules
             if parent and parent != name:
                 type_parent[name] = parent
         for wd in sorted(glob.glob(str(root / "assets" / "*"))):
             if not os.path.exists(f"{wd}/metadata.json"):
                 continue
-            m = json.load(open(f"{wd}/metadata.json"))
+            m = json.load(open(f"{wd}/metadata.json", encoding="utf-8"))
             meta.append(m)
             ins += _jsonl(f"{wd}/inspections.jsonl")
             mrows = _jsonl(f"{wd}/maintenance.jsonl")
@@ -274,7 +274,7 @@ def load(dirs: list[str] | None = None) -> Data:
                 p = Path(wd) / rf
                 if not p.exists():
                     continue
-                text = p.read_text()
+                text = p.read_text(encoding="utf-8")
                 parsed = parse_report(text)
                 reps.append({"maintenance_id": r["maintenance_id"], "asset_id": r["asset_id"],
                              "report_file": f"assets/{m['asset_id']}/{rf}", "text": text, **parsed})

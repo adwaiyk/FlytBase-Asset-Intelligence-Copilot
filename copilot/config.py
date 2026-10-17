@@ -9,11 +9,11 @@ def _load_dotenv():
     p = ROOT / ".env"
     if not p.exists():
         return
-    for line in p.read_text().splitlines():
+    for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
+            os.environ[k.strip()] = v.strip()
 
 
 _load_dotenv()
@@ -23,8 +23,9 @@ OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.
 MODEL = os.environ.get("COPILOT_MODEL", "google/gemma-4-31b-it:free")
 FALLBACK_MODELS = [m.strip() for m in os.environ.get(
     "COPILOT_FALLBACK_MODELS", "google/gemma-4-26b-a4b-it:free").split(",") if m.strip()]
+_default_dirs = "test-data/dataset" if (ROOT / "test-data" / "dataset").is_dir() else "data/flytbase-dataset/sample-data"
 DATA_DIRS = [d.strip() for d in os.environ.get(
-    "COPILOT_DATA_DIRS", "data/flytbase-dataset/test-data/dataset").split(",") if d.strip()]
+    "COPILOT_DATA_DIRS", _default_dirs).split(",") if d.strip()]
 AS_OF = os.environ.get("COPILOT_AS_OF", "").strip() or None
 DEFAULT_PASSWORD = os.environ.get("COPILOT_DEFAULT_PASSWORD", "flytbase2026")
 DB_PATH = os.environ.get("COPILOT_DB", str(ROOT / "copilot.db"))
@@ -35,7 +36,10 @@ def resolve_dir(d: str) -> Path:
     p = Path(d)
     if not p.is_absolute():
         p = ROOT / p
-    # Accept either the dataset repo root or its sample-data folder
-    if (p / "sample-data").is_dir() and not (p / "assets").is_dir():
+    # Accept dataset repo root, dataset subfolder, or sample-data folder
+    if (p / "dataset").is_dir() and not (p / "assets").is_dir():
+        p = p / "dataset"
+    elif (p / "sample-data").is_dir() and not (p / "assets").is_dir():
         p = p / "sample-data"
     return p
+

@@ -1,0 +1,26 @@
+{
+  "name": "FlytBase Asset Intelligence Copilot",
+  "short_name": "AssetAI",
+  "description": "Industrial SCADA-grade AI copilot for oilfield asset intelligence, well telemetry, and operator memory.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060911",
+  "theme_color": "#F59E0B",
+  "orientation": "landscape-primary",
+  "icons": [
+    {
+      "src": "/app/static/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app/static/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "lang": "en-US"
+}
