@@ -48,7 +48,7 @@ def record(eng: Engine, user: dict, kind: str, text: str, asset_id: str | None =
            new_value: float | None = None, rule_key: str | None = None, well_type: str | None = None,
            area: str | None = None, equipment_kind: str | None = None, claimed_state: str | None = None,
            valid_from: str | None = None, valid_to: str | None = None, rationale: str | None = None,
-           conv_id: str | None = None) -> dict:
+           conv_id: str | None = None, second_hand_from: str | None = None) -> dict:
     st = eng.store
     uid = user["user_id"]
     aid = eng.resolve_well(asset_id) if asset_id else None
@@ -155,6 +155,10 @@ def record(eng: Engine, user: dict, kind: str, text: str, asset_id: str | None =
         # who else said something about this well that agrees or disagrees
         for c in eng.context_items(aid):
             out["checks"].append(f"Also on record: {c['id']} by {c['author']} ({c['status']}): \"{c['text']}\"")
+        if second_hand_from:
+            status = "unconfirmed"
+            out["conflicts"].append(f"Second-hand: {user['name']} is relaying what {second_hand_from} said; "
+                                    f"recorded as unconfirmed until {second_hand_from} or a work order confirms it.")
         a = st.add_assertion(kind="well_fact", asset_id=aid, text=text, rationale=rationale, author_user_id=uid,
                              valid_from=valid_from or str(eng.as_of.date()), valid_to=valid_to, status=status,
                              conflicts=out["conflicts"], new_value=claimed or None, conv_id=conv_id)

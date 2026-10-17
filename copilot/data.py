@@ -36,13 +36,16 @@ RE_CONTAIN = re.compile(r"[Cc]ontained\s+(?:about|roughly|approximately|around|a
 RE_CLASS = re.compile(r"\((minor|moderate|reportable|major) class\)", re.I)
 RE_WRITTEN = re.compile(r"\*\*Report written:\*\*\s*([0-9]{1,2} \w{3} \d{4})")
 RE_HSE = re.compile(r"HSE notified\s+([\d.]+)\s*hours", re.I)
+RE_PARTS = re.compile(r"\*\*Parts installed:\*\*\s*(.+)")
+RE_FOLLOW = re.compile(r"\*\*Follow-up:\*\*\s*(.+)")
 RE_ROW = re.compile(r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*$")
 
 
 def parse_report(text: str) -> dict:
     out = {"report_mnt_id": None, "containment_hours": None, "stated_class": None,
            "report_written": None, "hse_notice_hours": None, "in_progress": "Work done so far" in text,
-           "compliance": [], "root_cause": None, "action_required": False}
+           "compliance": [], "root_cause": None, "action_required": False,
+           "parts_installed": None, "part_serial": None, "part_lot": None, "follow_up": None}
     if m := RE_HDR.search(text):
         out["report_mnt_id"] = m.group(1)
     if m := RE_CONTAIN.search(text):
@@ -62,6 +65,14 @@ def parse_report(text: str) -> dict:
                 out["compliance"].append({"protocol": m.group(1), "result": result, "detail": m.group(3)})
                 if result.lower() == "action required":
                     out["action_required"] = True
+    if m := RE_PARTS.search(text):
+        out["parts_installed"] = m.group(1).strip()
+        if sm := re.search(r"serial\s+([\w-]+)", out["parts_installed"]):
+            out["part_serial"] = sm.group(1)
+        if lm := re.search(r"lot\s+([\w-]+)", out["parts_installed"]):
+            out["part_lot"] = lm.group(1)
+    if m := RE_FOLLOW.search(text):
+        out["follow_up"] = m.group(1).strip()
     rc = re.search(r"## Root cause\s*(.*?)(?:\n## |\Z)", text, re.S)
     if rc:
         out["root_cause"] = " ".join(rc.group(1).split())[:400]
@@ -294,6 +305,8 @@ def load(dirs: list[str] | None = None) -> Data:
         "lat": (m.get("location") or {}).get("lat"), "lon": (m.get("location") or {}).get("lon"),
         "installed_on": m.get("installed_on"), "recorded_status": m.get("recorded_status"),
         "equipment": m.get("equipment", []),
+        "status": m.get("status") or "in_service", "decommissioned_on": m.get("decommissioned_on"),
+        "type_history": m.get("type_history") or [], "team_history": m.get("team_history") or [],
     } for m in meta]).drop_duplicates("asset_id", keep="last").reset_index(drop=True)
     # wells whose area isn't listed in areas.json still get an area entry
     for aid in wells.area_id.dropna().unique():

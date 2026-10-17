@@ -1,8 +1,10 @@
 __pycache__/
 *.pyc
 .env
-data/
+.env.*
+!.env.example
 *.db
 *.db-*
 .venv/
-results*.md
+data/*
+!data/flytbase-dataset/

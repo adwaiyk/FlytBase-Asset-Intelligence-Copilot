@@ -38,10 +38,30 @@ CREATE TABLE IF NOT EXISTS assertions (
   equipment_kind TEXT, field TEXT, old_value TEXT, new_value TEXT, rule_key TEXT,
   text TEXT, rationale TEXT, author_user_id TEXT, created_at TEXT, valid_from TEXT, valid_to TEXT,
   status TEXT, conflicts TEXT, visibility TEXT DEFAULT 'shared', conv_id TEXT);
+CREATE TABLE IF NOT EXISTS preferences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, text TEXT, created_at TEXT);
+CREATE TABLE IF NOT EXISTS login_attempts (
+  user_id TEXT, ip TEXT, ok INTEGER, at TEXT);
 CREATE INDEX IF NOT EXISTS ix_msg_conv ON messages(conv_id);
 CREATE INDEX IF NOT EXISTS ix_conv_user ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS ix_ep_user ON episodes(user_id);
 """
+
+
+def clean_json(o):
+    """Replaces NaN/Infinity (from pandas) with None so payloads are valid JSON."""
+    if isinstance(o, float):
+        return None if (o != o or o in (float("inf"), float("-inf"))) else o
+    if isinstance(o, dict):
+        return {k: clean_json(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [clean_json(v) for v in o]
+    if hasattr(o, "item") and not isinstance(o, (str, bytes)):
+        try:
+            return clean_json(o.item())
+        except Exception:
+            return str(o)
+    return o
 
 
 def _now() -> str:
@@ -139,14 +159,14 @@ class Store:
         if not self.conversation(user_id, conv_id):
             raise PermissionError("conversation does not belong to this user")
         self._x("INSERT INTO messages (conv_id,user_id,role,content,payload,created_at) VALUES (?,?,?,?,?,?)",
-                (conv_id, user_id, role, content, json.dumps(payload or {}, default=str), _now()))
+                (conv_id, user_id, role, content, json.dumps(clean_json(payload or {}), default=str), _now()))
         self._x("UPDATE conversations SET updated_at=? WHERE conv_id=?", (_now(), conv_id))
 
     def messages(self, user_id: str, conv_id: str):
         rows = self._q("SELECT role, content, payload, created_at FROM messages WHERE user_id=? AND conv_id=? "
                        "ORDER BY id", (user_id, conv_id))
         for r in rows:
-            r["payload"] = json.loads(r["payload"] or "{}")
+            r["payload"] = clean_json(json.loads(r["payload"] or "{}"))
         return rows
 
     # ------------------------------------------------------------------ episodic memory (private)
@@ -161,6 +181,13 @@ class Store:
         for r in rows:
             r["entities"] = json.loads(r["entities"] or "[]")
         return rows
+
+    # ------------------------------------------------------------------ private preferences
+    def add_preference(self, user_id: str, text: str):
+        self._x("INSERT INTO preferences (user_id,text,created_at) VALUES (?,?,?)", (user_id, text, _now()))
+
+    def preferences(self, user_id: str):
+        return [r["text"] for r in self._q("SELECT text FROM preferences WHERE user_id=? ORDER BY id", (user_id,))]
 
     # ------------------------------------------------------------------ shared assertions
     def add_assertion(self, **kw) -> dict:
@@ -192,6 +219,6 @@ class Store:
 
     def reset_memory(self):
         """Clears runtime feedback and conversations (for re-running scenarios). Keeps accounts."""
-        for t in ("assertions", "episodes", "messages", "conversations"):
+        for t in ("assertions", "episodes", "messages", "conversations", "preferences"):
             self._x(f"DELETE FROM {t}")
         self.version += 1

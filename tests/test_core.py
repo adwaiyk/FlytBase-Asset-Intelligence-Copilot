@@ -14,7 +14,7 @@ from copilot.store import Store
 
 @pytest.fixture(scope="module")
 def data():
-    return load()
+    return load(["data/flytbase-dataset/sample-data"])
 
 
 @pytest.fixture()

@@ -24,11 +24,11 @@ MODEL = os.environ.get("COPILOT_MODEL", "google/gemma-4-31b-it:free")
 FALLBACK_MODELS = [m.strip() for m in os.environ.get(
     "COPILOT_FALLBACK_MODELS", "google/gemma-4-26b-a4b-it:free").split(",") if m.strip()]
 DATA_DIRS = [d.strip() for d in os.environ.get(
-    "COPILOT_DATA_DIRS", "data/flytbase-dataset/sample-data").split(",") if d.strip()]
+    "COPILOT_DATA_DIRS", "data/flytbase-dataset/test-data/dataset").split(",") if d.strip()]
 AS_OF = os.environ.get("COPILOT_AS_OF", "").strip() or None
 DEFAULT_PASSWORD = os.environ.get("COPILOT_DEFAULT_PASSWORD", "flytbase2026")
 DB_PATH = os.environ.get("COPILOT_DB", str(ROOT / "copilot.db"))
-MAX_AGENT_STEPS = int(os.environ.get("COPILOT_MAX_STEPS", "8"))
+MAX_AGENT_STEPS = int(os.environ.get("COPILOT_MAX_STEPS", "12"))
 
 
 def resolve_dir(d: str) -> Path:
