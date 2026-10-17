@@ -72,6 +72,29 @@ def get_fleet_kpis():
 # -----------------------------------------------------------------------------
 # 4. PALANTIR / INDUSTRIAL SCADA CYBER-THEME CSS
 # -----------------------------------------------------------------------------
+def inject_pwa_and_logo():
+    """Inject PWA manifest link, apple-touch-icon, SW registration, and logo CSS."""
+    st.markdown("""
+    <!-- PWA: Manifest & Apple Meta -->
+    <link rel="manifest" href="/app/static/manifest.json">
+    <link rel="apple-touch-icon" href="/app/static/logo.png">
+    <meta name="theme-color" content="#F59E0B">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AssetAI">
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/app/static/sw.js')
+            .then(function(reg) { console.log('[PWA] SW registered:', reg.scope); })
+            .catch(function(err) { console.warn('[PWA] SW failed:', err); });
+        });
+      }
+    </script>
+    """, unsafe_allow_html=True)
+
+
 def inject_scada_theme():
     st.markdown("""
     <style>
@@ -570,12 +593,20 @@ with st.sidebar:
         store.new_conversation(active_user_id, str(date.today()))
         st.rerun()
 
-# --- TOP SCADA NAVBAR & 5-CARD HUD STRIP ---
+# --- PWA META + TOP SCADA NAVBAR & 5-CARD HUD STRIP ---
+inject_pwa_and_logo()
+
 st.markdown(f"""
 <div class="scada-navbar">
-    <div>
-        <div class="brand-title">⚡ FLYTBASE // ASSET INTELLIGENCE COPILOT</div>
-        <div class="brand-sub">Deterministic DuckDB Engine · Gemma 4 Reasoning · Scoped Memory Store</div>
+    <div style="display:flex; align-items:center; gap:14px;">
+        <img src="/app/static/logo.png"
+             alt="FlytBase Logo"
+             style="height:38px; width:auto; border-radius:6px; object-fit:contain;"
+             onerror="this.style.display='none'">
+        <div>
+            <div class="brand-title">FLYTBASE // ASSET INTELLIGENCE COPILOT</div>
+            <div class="brand-sub">Deterministic DuckDB Engine · Gemma 4 Reasoning · Scoped Memory Store</div>
+        </div>
     </div>
     <div style="display:flex; gap:12px; align-items:center; font-family:'JetBrains Mono'; font-size:0.78rem;">
         <span style="background:rgba(56,189,248,0.12); color:#38BDF8; border:1px solid rgba(56,189,248,0.35); padding:5px 12px; border-radius:6px;">
