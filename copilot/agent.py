@@ -7,9 +7,13 @@ import re
 import traceback
 from datetime import date, timedelta
 
-from . import config, feedback
+from . import config, feedback, procedures
+
+PROCEDURES = {"gas_odor_audit", "bypass_audit", "status_disagreements", "recalled_pumps", "spill_followup_audit",
+              "freeze_protection_audit", "failure_analysis", "shut_in_delays"}
 from .engine import Engine, fmt_date
 from .llm import LLM
+from .store import clean_json
 
 PERIOD = ("Period: 'last_N_days' | 'last_N_weeks' | 'last_N_months' | 'last_N_years' | 'YYYY' (calendar year) | "
           "'this_year' | 'month:YYYY-MM' | 'all'. Or give start/end as YYYY-MM-DD.")
@@ -52,6 +56,25 @@ TOOLS = [
         ["asset_id"]),
     _fn("search_docs", "Search manuals, SOPs and free-text repair reports. Returns quotes with section.",
         {"query": S, "asset_id": S}, ["query"]),
+    _fn("gas_odor_audit", "OPS-1: every operator note reporting gas (gas odor, rotten-egg smell, H2S monitor alarm) and whether a "
+        "field response (repair job start or MANUAL inspection) came within the SOP deadline.", {"since": S, "until": S}),
+    _fn("bypass_audit", "OPS-2: temporary flowline bypasses from operator notes vs MOC memo approvals (with extensions): "
+        "in place now, allowed / expired / not approved.", {}),
+    _fn("status_disagreements", "OPS-3: wells whose latest inspection and latest shut-in/restart operator note disagree, "
+        "with the real status now by the SOP precedence rule.", {"area": SCOPE["area"]}),
+    _fn("recalled_pumps", "Supplier recall: wells whose pump in the ground today (latest 'Parts installed') is from a recalled "
+        "lot, with install job, date and cost, producing status, and what people said about swaps.",
+        {"area": SCOPE["area"], "team": {"type": "string", "description": "Team name, e.g. Northwest Production"}}),
+    _fn("spill_followup_audit", "Spills at or above a volume (default reportable) in given areas since a date whose clean-up "
+        "report must contain a required phrase (e.g. a regulator letter's soil-sampling demand).",
+        {"areas": S, "since": S, "required_phrase": S, "min_volume": {"type": "number"}}, ["areas", "since", "required_phrase"]),
+    _fn("freeze_protection_audit", "OPS-5: cold readings (ambient ≤ -5 °C on producing wells, Dec–Feb) and whether a "
+        "'Heat trace check' job started within 7 days.", {"start": S, "end": S}),
+    _fn("failure_analysis", "OPS-4/OPS-6: classify corrective jobs by root-cause category and find repeat failures.",
+        {"period": {"type": "string", "description": PERIOD}, "area": SCOPE["area"], "equipment_kind": S}),
+    _fn("shut_in_delays", "Why wells stayed shut in longer than the repair itself (parts, crews, contractors, weather), "
+        "parsed from repair reports, by area with share and typical extra days. Use for 'what are we waiting on'.",
+        {"period": {"type": "string", "description": PERIOD}, "area": SCOPE["area"]}),
     _fn("list_documents", "List all manuals, SOPs, memos, notices and letters in fleet/.", {}),
     _fn("read_document", "Read a whole fleet document (manual, SOP, MOC memo, recall notice, regulator letter). "
         "Documents hold the rules, deadlines, approvals and lists that decide many answers.", {"doc": S}, ["doc"]),
@@ -76,7 +99,9 @@ TOOLS = [
          "asset_id": S, "inspection_id": S, "date": {"type": "string", "description": "YYYY-MM-DD of the inspection"},
          "field": S, "new_value": {"type": "number"}, "rule_key": S, "well_type": S, "area": S,
          "equipment_kind": S, "claimed_state": S, "valid_from": S, "valid_to": S,
-         "rationale": {"type": "string", "description": "Why, as the user said it"}}, ["kind", "text"]),
+         "rationale": {"type": "string", "description": "Why, as the user said it"},
+         "second_hand_from": {"type": "string", "description": "If the user relays someone else's claim ('X told me…'), X's name"}},
+        ["kind", "text"]),
     _fn("show_visual", "Choose the visual for the answer from a previous tool result. component: status_card | table | "
         "line_chart | bar_chart | map | heatmap.", {"result_id": S, "component": {"type": "string", "enum": [
             "status_card", "table", "line_chart", "bar_chart", "map", "heatmap"]}, "title": S}, ["result_id", "component"]),
@@ -97,7 +122,9 @@ Rules:
 7. When people disagree (notes, feedback, data), show both sides and which one the records support. A formal correction note overrides a detection; an operator's opinion does not.
 8. Prefer the specialised tools; use run_sql (DuckDB SQL over every record, including note text and full repair-report text via ILIKE) when none fits. Read the relevant documents (read_document) whenever a rule, deadline, approval, recall or letter matters: the documents decide most answers.
 9. Before answering about specific wells, check what people told the copilot (run_sql on the feedback table, or well_snapshot/well_notes) and say where each fact came from: records (ids), documents, or a named person. A second-hand claim ("X told me…") is recorded as unconfirmed.
-10. Some questions ask for a judgement or cannot be fully answered from the data (e.g. a quantity that is never measured). Say clearly what the data does and does not contain, do not invent data, and give the best evidence-based proxy with its limits.
+10. Some questions ask for a judgement or cannot be fully answered from the data. If a quantity is never recorded in the dataset (check the schema and documents), say so plainly; never repurpose a different field that only sounds similar (e.g. a test or equipment pressure is not a reservoir property). Then give the best evidence-based proxy, label it as a proxy, and state its limits.
+12. The Operations SOP protocols, MOC approvals, supplier recalls and regulator letters have dedicated audit tools (gas_odor_audit, bypass_audit, status_disagreements, recalled_pumps, spill_followup_audit, freeze_protection_audit, failure_analysis, shut_in_delays). Prefer them, and read the document to confirm parameters (dates, phrases, areas).
+13. A well's team comes from the well itself (team_id / team_history), not only from its area. Plugged and abandoned wells are not producing and not 'down'.
 11. A user's private preferences (below) apply to every answer for that user only.
 
 Fleet documents: {docs}
@@ -175,6 +202,8 @@ class Agent:
             return {"summary": summ, "rows": [], "sources": [e.src_fb(a)] + out.get("sources", []),
                     "memory_write": {"id": a["id"], "kind": a["kind"], "status": a["status"], "asset_id": a.get("asset_id"),
                                      "conflicts": out["conflicts"]}}
+        if name in PROCEDURES:
+            return getattr(procedures, name)(e, **args)
         fn = getattr(e, name, None)
         if fn is None or name.startswith("_"):
             raise ValueError(f"unknown tool {name}")
@@ -258,9 +287,11 @@ class Agent:
         if visual and len(visual["rows"]) <= 15:
             wells += [r.get("asset_id") for r in visual["rows"] if r.get("asset_id") and r.get("asset_id") not in wells]
         self.store.add_episode(user["user_id"], conv["conv_id"], conv.get("sim_date"), text, final[:800], wells[:20])
-        if conv.get("title") in (None, "", "New chat"):
+        fresh = self.store.conversation(user["user_id"], conv["conv_id"]) or {}
+        if fresh.get("title") in (None, "", "New chat"):
             self.store.rename_conversation(user["user_id"], conv["conv_id"], text[:60])
-        return {"content": final, **payload}
+            conv["title"] = text[:60]
+        return clean_json({"content": final, **payload})
 
     def pick_visual(self, text, results, chosen):
         data_results = {k: v for k, v in results.items() if v.get("rows") and v["tool"] not in (

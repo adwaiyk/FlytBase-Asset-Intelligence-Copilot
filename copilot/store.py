@@ -48,6 +48,22 @@ CREATE INDEX IF NOT EXISTS ix_ep_user ON episodes(user_id);
 """
 
 
+def clean_json(o):
+    """Replaces NaN/Infinity (from pandas) with None so payloads are valid JSON."""
+    if isinstance(o, float):
+        return None if (o != o or o in (float("inf"), float("-inf"))) else o
+    if isinstance(o, dict):
+        return {k: clean_json(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [clean_json(v) for v in o]
+    if hasattr(o, "item") and not isinstance(o, (str, bytes)):
+        try:
+            return clean_json(o.item())
+        except Exception:
+            return str(o)
+    return o
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -143,14 +159,14 @@ class Store:
         if not self.conversation(user_id, conv_id):
             raise PermissionError("conversation does not belong to this user")
         self._x("INSERT INTO messages (conv_id,user_id,role,content,payload,created_at) VALUES (?,?,?,?,?,?)",
-                (conv_id, user_id, role, content, json.dumps(payload or {}, default=str), _now()))
+                (conv_id, user_id, role, content, json.dumps(clean_json(payload or {}), default=str), _now()))
         self._x("UPDATE conversations SET updated_at=? WHERE conv_id=?", (_now(), conv_id))
 
     def messages(self, user_id: str, conv_id: str):
         rows = self._q("SELECT role, content, payload, created_at FROM messages WHERE user_id=? AND conv_id=? "
                        "ORDER BY id", (user_id, conv_id))
         for r in rows:
-            r["payload"] = json.loads(r["payload"] or "{}")
+            r["payload"] = clean_json(json.loads(r["payload"] or "{}"))
         return rows
 
     # ------------------------------------------------------------------ episodic memory (private)
