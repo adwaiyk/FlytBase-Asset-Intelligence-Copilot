@@ -1,0 +1,150 @@
+[
+ {
+  "id": "Q1",
+  "user": "U-201",
+  "text": "All our wells feed one reservoir. Map the reservoir pressure across the field from the pressure data.",
+  "new_chat": true,
+  "sim_date": "2027-01-15",
+  "reset": true
+ },
+ {
+  "id": "Q2",
+  "user": "U-301",
+  "text": "Which well produced the most oil in 2026?",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q3",
+  "user": "U-401",
+  "text": "Since 1 Nov 2026, every time an operator note reports gas at a well, did we get someone out to that well in time under our operating procedures? List every report and whether the response met the deadline. Show a table with Well, Area, Reported at (date and time), Response (record ID and time, or none), Hours to response, Deadline, and Met / Missed.",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q4",
+  "user": "U-402",
+  "text": "Across all areas, which temporary flowline bypasses are in place right now, and is each one allowed? Also list any bypass, past or present, that stayed in after its approval ran out or was never approved at all. Show a table with Well, Area, Bypass in (date), Bypass out (date, or \"still in\"), Approval (memo ID, or none), Approval valid until, and Status (Allowed / Expired / Not approved).",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q5",
+  "user": "U-201",
+  "text": "The State Oil & Gas Commission wrote to us in November 2026 about spills. Which of our spills does the letter cover, and on which ones are we not compliant? Show me a table.",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q6",
+  "user": "U-601",
+  "text": "Across the whole field, not just my area, for which wells do the latest inspection and the operator notes disagree about whether the well is producing oil? For each one, what is its real status right now, and why?",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q7.1",
+  "user": "U-301",
+  "text": "Over the last month the operators have written notes about wells that sound or behave wrong. Which of those wells haven't had a repair since? Rank the 10 most likely to need a repair in the next 90 days, other than a spill clean-up, and quote the notes as evidence.",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q7.2",
+  "user": "U-301",
+  "text": "Which three would you send a crew to first this week, and why?",
+  "new_chat": false,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q8.1",
+  "user": "U-601",
+  "text": "WELL-0333's recalled pump was swapped out yesterday. The work order isn't in the system yet. Please count it as replaced from now on.",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q8.2",
+  "user": "U-601",
+  "text": "Also, just for me: whenever you list wells, sort them by area and then by well ID, and show costs in thousands of dollars.",
+  "new_chat": false,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q8.3",
+  "user": "U-301",
+  "text": "Which recalled pumps are still in the ground right now?",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q8.4",
+  "user": "U-501",
+  "text": "Nathan told me the recalled pump on WELL-0577 was swapped as well. Take it off the recall list.",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q8.5",
+  "user": "U-601",
+  "text": "Show me the recalled pumps that are still in the ground in my area, and what it cost to install each one.",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q9.1",
+  "user": "U-301",
+  "text": "How many recalled pumps are still in the ground, and in which areas?",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q9.2",
+  "user": "U-301",
+  "text": "Different topic. Who leads Northwest Production, and how many wells does that team run?",
+  "new_chat": false,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q9.3",
+  "user": "U-301",
+  "text": "What does our operations SOP say about cold weather? Name one well that missed the check in December.",
+  "new_chat": false,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q9.4",
+  "user": "U-301",
+  "text": "An operator reported a gas smell at WELL-0332 on 3 Dec. What was the H2S reading?",
+  "new_chat": false,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q9.5",
+  "user": "U-301",
+  "text": "Back to the pumps from my first question: which of those wells are not producing oil right now, and when was each one last repaired?",
+  "new_chat": false,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q9.6",
+  "user": "U-301",
+  "text": "Of all the wells we've talked about today, which one would you deal with first, and why?",
+  "new_chat": false,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q10",
+  "user": "U-201",
+  "text": "When a well stays shut in longer than the repair itself, what are we usually waiting on: parts, crews, contractors or weather? Break it down by area for jobs started in 2026, with the typical number of extra days, and tell me if any area stands out. Show a table of reasons by area (share and typical extra days), and a stacked bar chart by area.",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ },
+ {
+  "id": "Q11",
+  "user": "U-501",
+  "text": "Which region of the field consistently runs hotter?",
+  "new_chat": true,
+  "sim_date": "2027-01-15"
+ }
+]

@@ -9,6 +9,7 @@ Each tool returns a dict: {tool, summary, rows, columns, sources, suggested_visu
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import timedelta
 
@@ -204,6 +205,11 @@ class Engine:
         notes = self.d.notes
         formal = notes[(notes.note_type == "correction") & notes.inspection_id.notna()]
         not_spill = {r.inspection_id: r.note_id for r in formal.itertuples()}
+        if "field" in notes:
+            for n in notes[(notes.note_type == "data_correction") & notes.inspection_id.notna()].itertuples():
+                if n.inspection_id in I.index and n.field in I.columns and n.corrected_value is not None:
+                    I.at[n.inspection_id, n.field] = float(n.corrected_value)
+                    I.at[n.inspection_id, "corrected_by"] = f"{n.note_id} by {self.name(n.author_user_id)}"
         for a in A:
             if a["status"] != "applied" or not a.get("inspection_id") or a["inspection_id"] not in I.index:
                 continue
@@ -216,12 +222,24 @@ class Engine:
                 I.at[iid, "corrected_by"] = by
         thr = {aid: self.rule("producing_delta_c", asset_id=aid)[0] for aid in self.d.wells.asset_id}
         I["threshold_c"] = I.asset_id.map(thr)
+        I["type_at_reading"] = I.well_type
+        for w in self.d.wells.itertuples():
+            th = w.type_history if isinstance(w.type_history, list) else []
+            if len(th) < 2:
+                continue
+            for h in th:
+                lo, hi = _ts(h.get("from")), _ts(h.get("to"))
+                m = (I.asset_id == w.asset_id) & (I.t >= (lo or I.t.min())) & (I.t < ((hi + timedelta(days=1)) if hi else I.t.max() + timedelta(days=1)))
+                I.loc[m, "type_at_reading"] = h["well_type"]
+                I.loc[m, "threshold_c"] = self.rule("producing_delta_c", well_type=h["well_type"])[0]
         I["delta_c"] = (I.wellhead_temp_c - I.ambient_temp_c).round(1)
         I["producing"] = I.delta_c >= I.threshold_c
         I["corrected_not_spill"] = I.inspection_id.map(not_spill)
         I["real_spill"] = I.spill_detected.fillna(False).astype(bool) & I.corrected_not_spill.isna()
         I["spill_class"] = [self.spill_class(v) if s else None for v, s in zip(I.spill_est_volume_bbl, I.real_spill)]
         self.I = I.reset_index(drop=True).sort_values(["asset_id", "t"])
+        plugged = set(self.d.wells[self.d.wells.status == "plugged_and_abandoned"].asset_id)
+        self.I["plugged"] = self.I.asset_id.isin(plugged)
         self.latest = self.I.groupby("asset_id").tail(1).set_index("asset_id", drop=False)
 
     def spill_class(self, vol):
@@ -384,7 +402,7 @@ class Engine:
     def fleet_status(self, area: str | None = None, well_type: str | None = None, producing: bool | None = None,
                      asset_ids: list[str] | None = None):
         ids = self.scope_wells(area, asset_ids, well_type)
-        L = self.latest[self.latest.asset_id.isin(ids)]
+        L = self.latest[self.latest.asset_id.isin(ids) & ~self.latest.plugged]
         if producing is not None:
             L = L[L.producing == bool(producing)]
         rows, sources = [], []
@@ -746,6 +764,17 @@ class Engine:
                for h in hits]
         return result("search_docs", summ, [], src, None)
 
+    def list_documents(self):
+        rows = [{"doc": k, "title": (v.strip().splitlines() or [""])[0].lstrip("# "), "chars": len(v)} for k, v in sorted(self.d.docs.items())]
+        return result("list_documents", "\n".join(f"- {r['doc']}: {r['title']}" for r in rows), rows, [], None)
+
+    def read_document(self, doc: str):
+        key = next((k for k in self.d.docs if k == doc or k.endswith(doc) or doc.lower() in k.lower()), None)
+        if not key:
+            raise ValueError("Unknown document. Available: " + ", ".join(sorted(self.d.docs)))
+        text = self.d.docs[key]
+        return result("read_document", f"[{key}]\n{text[:12000]}", [], [{"kind": "doc", "doc": key, "section": "full document", "quote": text[:300]}], None)
+
     def get_rules(self, well_type: str | None = None):
         rows = []
         for r in self.d.rules:
@@ -780,14 +809,23 @@ class Engine:
 
     def sql_tables(self) -> dict[str, pd.DataFrame]:
         I = self.I.drop(columns=["evidence_images"], errors="ignore")
-        W = self.d.wells.drop(columns=["equipment"]).assign(area_name=lambda x: x.area_id.map(self.d.area_name))
-        M = self.d.mnt.drop(columns=["cost_usd"])
-        REP = self.d.reports.drop(columns=["text", "compliance"], errors="ignore")
+        W = self.d.wells.assign(area_name=lambda x: x.area_id.map(self.d.area_name),
+                                team_name=lambda x: x.team_id.map(lambda t: self.d.teams.get(t, {}).get("name", t)),
+                                equipment=lambda x: x.equipment.map(json.dumps),
+                                type_history=lambda x: x.type_history.map(json.dumps),
+                                team_history=lambda x: x.team_history.map(json.dumps))
+        M = self.d.mnt.drop(columns=["cost_usd"]).copy()
+        for c in ("cost_revision",):
+            if c in M:
+                M[c] = M[c].map(lambda v: json.dumps(v) if isinstance(v, dict) else v)
+        REP = self.d.reports.drop(columns=["compliance"], errors="ignore")
+        users = pd.DataFrame(list(self.d.users.values()))
         return {"wells": W, "inspections": I, "repairs": M, "regulator_events": self.d.reg, "notes": self.d.notes,
-                "reports": REP, "feedback": pd.DataFrame(self.feedback) if self.feedback else pd.DataFrame(columns=["id"])}
+                "reports": REP, "users": users, "areas": pd.DataFrame([{"area_id": k, "name": v.get("name"), "team_id": v.get("team_id"), "n_wells": len(v.get("asset_ids", []))} for k, v in self.d.areas.items()]), "feedback": pd.DataFrame([{k: v for k, v in a.items() if k != "conflicts"} | {"author_name": self.name(a["author_user_id"])} for a in self.feedback]) if self.feedback else pd.DataFrame(columns=["id", "asset_id", "kind", "text", "status", "author_name"])}
 
     SQL_SCHEMA = (
-        "wells(asset_id, name, well_type, area_id, area_name, team_id, in_charge_user_id, lat, lon, installed_on, recorded_status); "
+        "wells(asset_id, name, well_type, area_id, area_name, team_id, team_name, in_charge_user_id, lat, lon, installed_on, recorded_status, status ['in_service'|'plugged_and_abandoned'], decommissioned_on, equipment JSON, type_history JSON, team_history JSON); "
+        "users(user_id, name, role, team_id); areas(area_id, name, team_id, n_wells); "
         "inspections(inspection_id, asset_id, t TIMESTAMP, inspector_user_id, method, ambient_temp_c, wellhead_temp_c [effective, after corrections], "
         "orig_wellhead_temp_c, delta_c, threshold_c, producing BOOL, spill_detected, real_spill BOOL [excludes corrected], spill_est_volume_bbl [effective], "
         "spill_class, spill_area_pct, notes, well_type, area_id, lat, lon); "
@@ -795,7 +833,10 @@ class Engine:
         "technician_user_id, contractor, downtime_hours, cost_total, cost_labor, cost_parts, triggered_by_inspection_id, report_file); "
         "regulator_events(event_id, asset_id, d TIMESTAMP, agency, event_type, protocol_id, related_inspection_id, hours_to_report, detail, fine_usd, status); "
         "notes(note_id, asset_id, created_at, author_user_id, note_type, inspection_id, linked_inspection_id, text, valid_from, valid_to); "
-        "reports(maintenance_id, asset_id, containment_hours, stated_class, hse_notice_hours, report_written, in_progress, root_cause, action_required)")
+        "reports(maintenance_id, asset_id, report_file, text [full report markdown; use ILIKE], containment_hours, stated_class, hse_notice_hours, report_written, in_progress, root_cause, action_required, parts_installed, part_serial, part_lot, follow_up). "
+        "feedback(id, kind, asset_id, inspection_id, field, old_value, new_value, text, author_user_id, author_name, created_at, valid_from, valid_to, status) = what users told the copilot at run time (shared). "
+        "notes also has field, original_value, corrected_value for note_type='data_correction'; note_type 'operator_note' = shift notes by field operators. "
+        "repairs may have recorded_at (late entry) and cost_revision JSON. inspections may have recorded_at. Timestamps are UTC.")
 
     def run_sql(self, query: str):
         q = query.strip().rstrip(";")

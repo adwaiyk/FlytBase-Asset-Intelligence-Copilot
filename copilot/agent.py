@@ -52,6 +52,11 @@ TOOLS = [
         ["asset_id"]),
     _fn("search_docs", "Search manuals, SOPs and free-text repair reports. Returns quotes with section.",
         {"query": S, "asset_id": S}, ["query"]),
+    _fn("list_documents", "List all manuals, SOPs, memos, notices and letters in fleet/.", {}),
+    _fn("read_document", "Read a whole fleet document (manual, SOP, MOC memo, recall notice, regulator letter). "
+        "Documents hold the rules, deadlines, approvals and lists that decide many answers.", {"doc": S}, ["doc"]),
+    _fn("save_my_preference", "Store a PRIVATE preference of the current user about how answers should look "
+        "(sorting, units, format). Only this user sees it.", {"text": S}, ["text"]),
     _fn("get_rules", "The rules registry (thresholds, deadlines) from manuals/SOPs plus users' scoped rules.",
         {"well_type": S}),
     _fn("run_sql", "Read-only DuckDB SQL over curated views, for questions the other tools don't cover. Schema: "
@@ -90,7 +95,15 @@ Rules:
 5. Refer to wells by id (WELL-0001) and to areas, teams and people by NAME. Cite record ids (INS-, MNT-, REG-, CTX-, FB-) and documents (e.g. T200 manual §9.3, SR-01) inline.
 6. Visual: if the user names one (table, map, heatmap, bar chart, line chart, status card) call show_visual with it. Otherwise one well right now → status_card; a list → table; change over time → line_chart; comparing a few wells/areas → bar_chart; where things are → map; two dimensions (area × month) → heatmap. A short factual answer may need no visual.
 7. When people disagree (notes, feedback, data), show both sides and which one the records support. A formal correction note overrides a detection; an operator's opinion does not.
-8. Prefer the specialised tools; use run_sql only when none fits.
+8. Prefer the specialised tools; use run_sql (DuckDB SQL over every record, including note text and full repair-report text via ILIKE) when none fits. Read the relevant documents (read_document) whenever a rule, deadline, approval, recall or letter matters: the documents decide most answers.
+9. Before answering about specific wells, check what people told the copilot (run_sql on the feedback table, or well_snapshot/well_notes) and say where each fact came from: records (ids), documents, or a named person. A second-hand claim ("X told me…") is recorded as unconfirmed.
+10. Some questions ask for a judgement or cannot be fully answered from the data (e.g. a quantity that is never measured). Say clearly what the data does and does not contain, do not invent data, and give the best evidence-based proxy with its limits.
+11. A user's private preferences (below) apply to every answer for that user only.
+
+Fleet documents: {docs}
+Areas: {areas}
+Teams: {teams}
+{prefs}
 
 Answer format (markdown): first line = the direct answer in bold. Then 2-6 short bullets with the key facts and their evidence ids. Mention conflicts/unconfirmed items explicitly. Do not paste whole tables: the visual shows the rows."""
 
@@ -148,6 +161,10 @@ class Agent:
         args = {k: v for k, v in (args or {}).items() if v not in (None, "", [])}
         if name == "recall_my_conversations":
             return self.recall(user, conv, args.get("when"), args.get("about"))
+        if name == "save_my_preference":
+            self.store.add_preference(user["user_id"], args["text"])
+            return {"summary": f"Saved private preference for {user['name']}: {args['text']}", "rows": [], "sources": [],
+                    "memory_write": {"id": "PREF", "kind": "private_preference", "status": "applied", "conflicts": []}}
         if name == "record_feedback":
             out = feedback.record(e, user, conv_id=conv["conv_id"], **args)
             summ = "Recorded " + json.dumps({"assertion": {k: out["assertion"].get(k) for k in (
@@ -172,7 +189,12 @@ class Agent:
         history = self.store.messages(user["user_id"], conv["conv_id"])[-12:]
         sysmsg = SYSTEM.format(today=fmt_date(e.as_of), user_name=user["name"],
                                user_role=(user.get("role") or "").replace("_", " "),
-                               user_team=e.d.teams.get(user.get("team_id"), {}).get("name", user.get("team_id")))
+                               user_team=e.d.teams.get(user.get("team_id"), {}).get("name", user.get("team_id")),
+                               docs=", ".join(sorted(e.d.docs)),
+                               areas=", ".join(f"{v['name']} ({k})" for k, v in e.d.areas.items()),
+                               teams=", ".join(f"{t['name']} (lead {e.name(t.get('lead_user_id'))})" for t in e.d.teams.values()),
+                               prefs=("Private preferences of " + user["name"] + ": " + "; ".join(self.store.preferences(user["user_id"])))
+                               if self.store.preferences(user["user_id"]) else "")
         msgs = [{"role": "system", "content": sysmsg}]
         for m in history:
             if m["role"] in ("user", "assistant") and m["content"]:
@@ -242,7 +264,7 @@ class Agent:
 
     def pick_visual(self, text, results, chosen):
         data_results = {k: v for k, v in results.items() if v.get("rows") and v["tool"] not in (
-            "search_docs", "get_rules", "recall_my_conversations", "record_feedback")}
+            "search_docs", "get_rules", "recall_my_conversations", "record_feedback", "list_documents", "read_document", "save_my_preference")}
         if not data_results:
             return None
         want = requested_visual(text)

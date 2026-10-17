@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS assertions (
   equipment_kind TEXT, field TEXT, old_value TEXT, new_value TEXT, rule_key TEXT,
   text TEXT, rationale TEXT, author_user_id TEXT, created_at TEXT, valid_from TEXT, valid_to TEXT,
   status TEXT, conflicts TEXT, visibility TEXT DEFAULT 'shared', conv_id TEXT);
+CREATE TABLE IF NOT EXISTS preferences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, text TEXT, created_at TEXT);
+CREATE TABLE IF NOT EXISTS login_attempts (
+  user_id TEXT, ip TEXT, ok INTEGER, at TEXT);
 CREATE INDEX IF NOT EXISTS ix_msg_conv ON messages(conv_id);
 CREATE INDEX IF NOT EXISTS ix_conv_user ON conversations(user_id);
 CREATE INDEX IF NOT EXISTS ix_ep_user ON episodes(user_id);
@@ -162,6 +166,13 @@ class Store:
             r["entities"] = json.loads(r["entities"] or "[]")
         return rows
 
+    # ------------------------------------------------------------------ private preferences
+    def add_preference(self, user_id: str, text: str):
+        self._x("INSERT INTO preferences (user_id,text,created_at) VALUES (?,?,?)", (user_id, text, _now()))
+
+    def preferences(self, user_id: str):
+        return [r["text"] for r in self._q("SELECT text FROM preferences WHERE user_id=? ORDER BY id", (user_id,))]
+
     # ------------------------------------------------------------------ shared assertions
     def add_assertion(self, **kw) -> dict:
         n = len(self._q("SELECT id FROM assertions")) + 1
@@ -192,6 +203,6 @@ class Store:
 
     def reset_memory(self):
         """Clears runtime feedback and conversations (for re-running scenarios). Keeps accounts."""
-        for t in ("assertions", "episodes", "messages", "conversations"):
+        for t in ("assertions", "episodes", "messages", "conversations", "preferences"):
             self._x(f"DELETE FROM {t}")
         self.version += 1
