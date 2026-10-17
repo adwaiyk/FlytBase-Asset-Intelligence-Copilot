@@ -1,0 +1,12 @@
+# .streamlit/config.toml
+[theme]
+base = "dark"
+primaryColor = "#F59E0B"
+backgroundColor = "#0B0F19"
+secondaryBackgroundColor = "#111827"
+textColor = "#F9FAFB"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = true

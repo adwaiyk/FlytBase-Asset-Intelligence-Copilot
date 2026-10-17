@@ -1,0 +1,16 @@
+{
+  "include": [
+    "copilot",
+    "tests",
+    "app.py",
+    "ui_polish.py"
+  ],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "C:\\Users\\Aryan\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages"
+      ]
+    }
+  ]
+}

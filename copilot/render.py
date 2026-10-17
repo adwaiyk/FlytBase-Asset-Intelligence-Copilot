@@ -3,12 +3,15 @@ chooses component + result handle; the rows come from the tool result, never
 from LLM text."""
 from __future__ import annotations
 
+import pydeck as pdk
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-OK, BAD, AIR, WELL = "#2E7D32", "#C62828", "#90A4AE", "#E65100"
+from ui_polish import style_plotly_figure, render_well_status_card
+
+OK, BAD, AIR, WELL = "#10B981", "#EF4444", "#94A3B8", "#F59E0B"
 
 
 def render_visual(v: dict, key: str):
@@ -25,32 +28,21 @@ def render_visual(v: dict, key: str):
 
 def _card(rows, title, v, key):
     r = rows[0]
-    if "producing" not in r:
+    if "producing" not in r and "is_producing" not in r:
         return _table(rows, title, v, key)
-    ok = r["producing"]
-    with st.container(border=True):
-        c1, c2 = st.columns([3, 2])
-        c1.markdown(f"### {'🟢' if ok else '🔴'} {r['asset_id']} · {'Producing oil' if ok else 'Not producing oil'}")
-        c1.caption(f"{r.get('name', '')} · {r.get('well_type')} · {r.get('area')}")
-        c2.metric("Wellhead above air", f"{r['delta_c']} °C", f"limit {r['threshold_c']:g} °C", delta_color="off")
-        a, b, c = st.columns(3)
-        a.markdown(f"**Last inspection**  \n{r['last_inspection_id']}  \n{r['last_inspected']} · {r['method']} · {r['inspector']}")
-        stale = r.get("recorded_status_out_of_date")
-        b.markdown(f"**Recorded status**  \n`{r['recorded_status']}`" + ("  \n:red[out of date]" if stale else "  \n:green[matches]"))
-        c.markdown(f"**Readings**  \nwellhead {r['wellhead_temp_c']} °C  \nair {r['ambient_temp_c']} °C")
-        if r.get("reason"):
-            st.markdown(f"**Reason:** {r['reason']}")
-        if r.get("observation"):
-            st.markdown(f"**Inspector observation:** “{r['observation']}” — suggest a field check")
-        if r.get("corrected"):
-            st.info(f"Reading corrected ({r['corrected']}); original wellhead {r.get('original_wellhead_temp_c')} °C kept.")
-        for o in r.get("open_repairs") or []:
-            st.markdown(f"🔧 Open repair: {o}")
-        for c_ in r.get("context") or []:
-            st.markdown(f"📝 {c_}")
-        for c_ in r.get("conflicts") or []:
-            st.warning(c_)
-        st.caption(f"Rule: {r.get('threshold_source')}")
+    render_well_status_card(r)
+    # If there are open repairs, notes, or observations, show them neatly below
+    extra_items = []
+    if r.get("observation"):
+        extra_items.append(f"🔍 **Observation:** {r['observation']}")
+    for op in r.get("open_repairs") or []:
+        extra_items.append(f"🔧 **Open Repair:** {op}")
+    for ctx in r.get("context") or []:
+        extra_items.append(f"📝 {ctx}")
+    if extra_items:
+        with st.container():
+            for item in extra_items:
+                st.caption(item)
 
 
 def _table(rows, title, v, key):
@@ -59,7 +51,8 @@ def _table(rows, title, v, key):
     df = df[cols]
     if "producing" in df:
         df["producing"] = df["producing"].map({True: "yes", False: "no"})
-    st.markdown(f"**{title}**")
+    if title:
+        st.markdown(f"**📋 {title}**")
     st.dataframe(df, hide_index=True, use_container_width=True, key=f"t{key}")
 
 
@@ -75,16 +68,16 @@ def _line(rows, title, v, key):
     colors = {"wellhead_temp_c": WELL, "ambient_temp_c": AIR}
     for s in series:
         fig.add_trace(go.Scatter(x=df[x], y=df[s], name=s.replace("_temp_c", "").replace("_", " ") + " °C",
-                                 mode="lines+markers", line=dict(color=colors.get(s), width=2)))
+                                 mode="lines+markers", line=dict(color=colors.get(s, "#38BDF8"), width=2.5)))
     if "producing" in df:
         off = df[~df["producing"].astype(bool)]
         fig.add_trace(go.Scatter(x=off[x], y=off[series[0]], mode="markers", name="not producing",
                                  marker=dict(color=BAD, size=14, symbol="x")))
         for xv in off[x]:
-            fig.add_vrect(x0=xv - pd.Timedelta(days=3), x1=xv + pd.Timedelta(days=3), fillcolor=BAD, opacity=0.08,
+            fig.add_vrect(x0=xv - pd.Timedelta(days=3), x1=xv + pd.Timedelta(days=3), fillcolor=BAD, opacity=0.12,
                           line_width=0)
-    fig.update_layout(title=title, height=380, margin=dict(l=10, r=10, t=40, b=10), yaxis_title="°C",
-                      legend=dict(orientation="h", y=-0.2))
+    fig.update_layout(height=380, yaxis_title="°C")
+    fig = style_plotly_figure(fig, title)
     st.plotly_chart(fig, use_container_width=True, key=f"l{key}")
 
 
@@ -95,23 +88,81 @@ def _bar(rows, title, v, key):
     y = h.get("y") if h.get("y") in df else next(c for c in df.columns if df[c].dtype.kind in "fi")
     color = "well_type" if "well_type" in df else None
     fig = px.bar(df, x=x, y=y, color=color, text=y, title=title,
-                 color_discrete_sequence=["#1565C0", "#EF6C00", "#6A1B9A"])
-    fig.update_layout(height=380, margin=dict(l=10, r=10, t=40, b=10))
+                 color_discrete_sequence=["#F59E0B", "#38BDF8", "#EF4444"])
+    fig.update_layout(height=380)
+    fig = style_plotly_figure(fig, title)
     st.plotly_chart(fig, use_container_width=True, key=f"b{key}")
 
 
 def _map(rows, title, v, key):
-    df = pd.DataFrame(rows).dropna(subset=["lat", "lon"])
-    hover = [c for c in ("asset_id", "date", "volume_bbl", "spill_class", "delta_c", "reason") if c in df]
-    size = "volume_bbl" if "volume_bbl" in df else None
-    fig = px.scatter_map(df, lat="lat", lon="lon", hover_name="asset_id" if "asset_id" in df else None,
-                         hover_data=hover, size=size, size_max=22, zoom=11, title=title,
-                         color="spill_class" if "spill_class" in df else None,
-                         text="asset_id" if "asset_id" in df else None)
-    fig.update_traces(marker=dict(sizemin=10))
-    fig.update_layout(map_style="open-street-map", height=440, margin=dict(l=0, r=0, t=40, b=0))
-    st.plotly_chart(fig, use_container_width=True, key=f"m{key}")
-    _table(rows, "Pins", {"columns": [c for c in ("asset_id", "date", "volume_bbl", "spill_class", "lat", "lon") if c in df]}, key + "m")
+    df = pd.DataFrame(rows)
+    lat_col = "latitude" if "latitude" in df.columns else ("lat" if "lat" in df.columns else None)
+    lon_col = "longitude" if "longitude" in df.columns else ("lon" if "lon" in df.columns else None)
+    if not lat_col or not lon_col:
+        return _table(rows, title, v, key)
+    df = df.dropna(subset=[lat_col, lon_col])
+    if df.empty:
+        return _table(rows, title, v, key)
+
+    if title:
+        st.markdown(f"**🗺️ {title}**")
+
+    # Try modern dark PyDeck map
+    rendered_deck = False
+    try:
+        df["_lat"] = df[lat_col].astype(float)
+        df["_lon"] = df[lon_col].astype(float)
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=df,
+            get_position="[_lon, _lat]",
+            get_fill_color="[245, 158, 11, 220]",
+            get_line_color="[255, 255, 255, 255]",
+            line_width_min_pixels=2,
+            get_radius=400,
+            pickable=True,
+        )
+        view_state = pdk.ViewState(
+            latitude=float(df["_lat"].mean()),
+            longitude=float(df["_lon"].mean()),
+            zoom=11.2,
+            pitch=30,
+        )
+        tooltip_fields = []
+        if "asset_id" in df:
+            tooltip_fields.append("Asset: {asset_id}")
+        if "date" in df:
+            tooltip_fields.append("Date: {date}")
+        if "volume_bbl" in df:
+            tooltip_fields.append("Volume: {volume_bbl} bbl")
+        if "spill_class" in df:
+            tooltip_fields.append("Class: {spill_class}")
+        tt_text = "\n".join(tooltip_fields) if tooltip_fields else "Asset: {asset_id}"
+
+        st.pydeck_chart(pdk.Deck(
+            map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+            initial_view_state=view_state,
+            layers=[layer],
+            tooltip={"text": tt_text}
+        ))
+        rendered_deck = True
+    except Exception:
+        pass
+
+    if not rendered_deck:
+        hover = [c for c in ("asset_id", "date", "volume_bbl", "spill_class", "delta_c", "reason") if c in df]
+        size = "volume_bbl" if "volume_bbl" in df else None
+        fig = px.scatter_map(df, lat=lat_col, lon=lon_col, hover_name="asset_id" if "asset_id" in df else None,
+                             hover_data=hover, size=size, size_max=22, zoom=11, title=title,
+                             color="spill_class" if "spill_class" in df else None,
+                             text="asset_id" if "asset_id" in df else None)
+        fig.update_traces(marker=dict(sizemin=10))
+        fig.update_layout(map_style="carto-darkmatter", height=440, margin=dict(l=0, r=0, t=40, b=0))
+        st.plotly_chart(fig, use_container_width=True, key=f"m{key}")
+
+    _table(rows, "Asset Coordinates & Records",
+           {"columns": [c for c in ("asset_id", "date", "volume_bbl", "spill_class", lat_col, lon_col) if c in df]},
+           key + "m")
 
 
 def _heatmap(rows, title, v, key):
@@ -119,8 +170,9 @@ def _heatmap(rows, title, v, key):
     idx = v.get("hints", {}).get("rows_field", df.columns[0])
     df = df.set_index(idx)
     total = df.pop("Total") if "Total" in df else None
-    fig = px.imshow(df, text_auto=True, aspect="auto", color_continuous_scale="OrRd", title=title)
-    fig.update_layout(height=120 + 45 * len(df), margin=dict(l=10, r=10, t=40, b=10))
+    fig = px.imshow(df, text_auto=True, aspect="auto", color_continuous_scale="YlOrRd", title=title)
+    fig.update_layout(height=120 + 45 * len(df))
+    fig = style_plotly_figure(fig, title)
     st.plotly_chart(fig, use_container_width=True, key=f"h{key}")
     if total is not None:
         st.caption("Totals: " + " · ".join(f"{i}: **{t}**" for i, t in total.items()))
@@ -140,3 +192,4 @@ def render_sources(sources: list[dict], key: str):
             else:
                 st.markdown(f"🔎 **{s.get('id', s.get('doc'))}** · {k}" + (f" · {s.get('date')}" if s.get("date") else "")
                             + (f" · `{s.get('file')}`" if s.get("file") else ""))
+
