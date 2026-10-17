@@ -28,7 +28,8 @@ MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", 
 def fmt_date(t) -> str:
     if t is None or (not isinstance(t, str) and pd.isna(t)):
         return ""
-    return pd.Timestamp(t).strftime("%-d %b %Y")
+    ts = pd.Timestamp(t)
+    return f"{ts.day} {ts.strftime('%b %Y')}"
 
 
 def _ts(s) -> pd.Timestamp | None:
@@ -653,8 +654,9 @@ class Engine:
                         [f.event_id, iid], iid)
                 else:
                     due = t + timedelta(hours=limit)
+                    due_s = f"{due.day} {due.strftime('%b %Y %H:%M')}"
                     add(aid, "SR-01", "breach" if due < now else "pending",
-                        f"{tag}: reportable, but NO written notice on record (due {due.strftime('%-d %b %Y %H:%M')} UTC)"
+                        f"{tag}: reportable, but NO written notice on record (due {due_s} UTC)"
                         + (" — overdue" if due < now else ""), due, [iid], iid)
                 # SR-03
                 due = t + timedelta(days=d60)
