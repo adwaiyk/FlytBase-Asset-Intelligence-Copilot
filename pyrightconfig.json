@@ -5,6 +5,10 @@
     "app.py",
     "ui_polish.py"
   ],
+  "pythonVersion": "3.14",
+  "pythonPlatform": "Windows",
+  "pythonPath": "C:\\Users\\Aryan\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+  "venvPath": "C:\\Users\\Aryan\\AppData\\Local\\Python\\pythoncore-3.14-64",
   "executionEnvironments": [
     {
       "root": ".",
@@ -12,5 +16,9 @@
         "C:\\Users\\Aryan\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages"
       ]
     }
-  ]
+  ],
+  "typeCheckingMode": "basic",
+  "reportMissingModuleSource": "none",
+  "reportMissingImports": "warning",
+  "useLibraryCodeForTypes": true
 }
