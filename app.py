@@ -20,6 +20,14 @@ from copilot.data import load
 from copilot.engine import Engine
 from copilot.store import Store
 
+# Load navbar logo as inline base64 data URI (avoids Streamlit /app/static/ path issues)
+_LOGO_B64_FILE = os.path.join(os.path.dirname(__file__), "static", "logo-nav-b64.txt")
+try:
+    with open(_LOGO_B64_FILE, "r") as _f:
+        _LOGO_DATA_URI = "data:image/png;base64," + _f.read().strip()
+except Exception:
+    _LOGO_DATA_URI = ""
+
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIG
 # -----------------------------------------------------------------------------
@@ -107,6 +115,8 @@ def inject_scada_theme():
             font-family: 'Inter', sans-serif !important;
         }
         #MainMenu, footer, header {visibility: hidden !important; height: 0 !important;}
+        /* Keep the sidebar collapse/expand toggle always visible */
+        [data-testid="collapsedControl"] {visibility: visible !important; height: auto !important;}
         .block-container {
             padding-top: 1.0rem !important;
             padding-bottom: 5rem !important;
@@ -599,10 +609,9 @@ inject_pwa_and_logo()
 st.markdown(f"""
 <div class="scada-navbar">
     <div style="display:flex; align-items:center; gap:14px;">
-        <img src="/app/static/logo.png"
-             alt="FlytBase Logo"
-             style="height:38px; width:auto; border-radius:6px; object-fit:contain;"
-             onerror="this.style.display='none'">
+        <img src="{_LOGO_DATA_URI}"
+             alt="WellWise Logo"
+             style="height:38px; width:auto; border-radius:6px; object-fit:contain;">
         <div>
             <div class="brand-title">FLYTBASE // ASSET INTELLIGENCE COPILOT</div>
             <div class="brand-sub">Deterministic DuckDB Engine · Gemma 4 Reasoning · Scoped Memory Store</div>
